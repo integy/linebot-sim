@@ -1,5 +1,7 @@
 # 循線機械人模擬器 · Line Following Robot Simulator
 
+🔗 **線上版：https://integy.github.io/linebot-sim/**
+
 用積木程式控制一部有 **7 個紅外線感測器** 的循線機械人，在 3D 場景中完成 10 條由淺入深的賽道。
 
 - 純前端、不用 build：`git push origin main` 即部署到 GitHub Pages
