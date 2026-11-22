@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>循線機械人模擬器 · Line Following Robot Simulator</title>
+<link rel="stylesheet" href="css/app.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+
+  <aside id="side">
+    <header class="brand">
+      <div class="logo">◉</div>
+      <div>
+        <h1>循線機械人</h1>
+        <p>LINE FOLLOWING SIMULATOR</p>
+      </div>
+    </header>
+
+    <section class="panel">
+      <h2>關卡 <span id="levelCount">1 / 10</span></h2>
+      <div id="levelList" class="levels"></div>
+    </section>
+
+    <section class="panel objective">
+      <h2>任務</h2>
+      <p id="objText">—</p>
+      <dl class="stats">
+        <div><dt>時間</dt><dd id="statTime">0.00</dd></div>
+        <div><dt>圈數</dt><dd id="statLaps">0 / 1</dd></div>
+        <div><dt>最佳</dt><dd id="statBest">—</dd></div>
+      </dl>
+    </section>
+
+    <section class="panel sensors">
+      <h2>感測器 <span class="hint">7 × 紅外線</span></h2>
+      <div id="sensorBar" class="sensor-bar"></div>
+      <div id="sensorVals" class="sensor-vals"></div>
+    </section>
+
+    <section class="panel cam" id="camPanel">
+      <h2>視角</h2>
+      <div class="seg" id="camModes">
+        <button data-mode="chase" class="on">跟隨</button>
+        <button data-mode="top">俯瞰</button>
+        <button data-mode="orbit">自由</button>
+      </div>
+    </section>
+  </aside>
+
+  <main id="stage">
+    <canvas id="view"></canvas>
+    <div class="overlay-status" id="statusPill">就緒</div>
+    <div class="overlay-help">拖曳旋轉 · 滾輪縮放（自由視角）</div>
+  </main>
+
+  <aside id="code">
+    <header class="code-head">
+      <div>
+        <h2>積木程式</h2>
+        <p id="progName">未命名程式</p>
+      </div>
+      <div class="btns">
+        <button id="btnRun" class="primary">▶ 執行</button>
+        <button id="btnStop">■ 停止</button>
+      </div>
+    </header>
+
+    <div id="blockly"></div>
+
+    <footer class="code-foot">
+      <div class="row">
+        <button id="btnDemo">示範程式</button>
+        <button id="btnClear">清空</button>
+        <button id="btnReset">重置機械人</button>
+      </div>
+      <div class="row">
+        <label>速度 <input id="speed" type="range" min="0.25" max="3" step="0.25" value="1" /></label>
+        <span id="speedVal">1.0×</span>
+      </div>
+      <div id="msg" class="msg"></div>
+    </footer>
+  </aside>
+</div>
+
+<script src="vendor/blockly.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
