@@ -149,6 +149,52 @@ function buildStartGate(t) {
   return plane;
 }
 
+function sensorOffset(i) {
+  // index 0 sits on the robot's LEFT; local +Z is the left-hand side
+  return ((7 - 1) / 2 - i) * ROBOT.sensorSpacing;
+}
+
+function makeReadoutStrip() {
+  const W = 7 * 64, H = 128;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext("2d");
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const spr = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false })
+  );
+  spr.scale.set(0.118, 0.034, 1);
+  spr.renderOrder = 30;
+  const last = { vals: [] };
+  const draw = (vals) => {
+    ctx.clearRect(0, 0, W, H);
+    for (let i = 0; i < 7; i++) {
+      const v = Math.round(vals[i] ?? 0);
+      const on = v > 45;
+      const x = i * 64;
+      ctx.fillStyle = on ? "rgba(12,40,32,0.94)" : "rgba(10,16,26,0.86)";
+      ctx.beginPath();
+      ctx.roundRect(x + 3, 4, 58, 120, 12);
+      ctx.fill();
+      ctx.strokeStyle = on ? "#3ddc97" : "#2b3a4a";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.textAlign = "center";
+      ctx.font = "600 26px ui-monospace, Menlo, monospace";
+      ctx.fillStyle = on ? "#8ff3c4" : "#6b7d99";
+      ctx.fillText(String(i + 1), x + 32, 40);
+      ctx.font = "bold 44px ui-monospace, Menlo, monospace";
+      ctx.fillStyle = on ? "#ffffff" : "#94a6c0";
+      ctx.fillText(String(v), x + 32, 96);
+    }
+    tex.needsUpdate = true;
+  };
+  draw([0, 0, 0, 0, 0, 0, 0]);
+  return { spr, draw, last };
+}
+
 function buildRobotMesh() {
   const g = new THREE.Group();
 
@@ -156,7 +202,7 @@ function buildRobotMesh() {
     new THREE.BoxGeometry(0.115, 0.026, 0.088),
     new THREE.MeshStandardMaterial({ color: 0x5a6b86, roughness: 0.42, metalness: 0.35 })
   );
-  body.position.y = 0.021;
+  body.position.y = 0.024;
   body.castShadow = true;
   g.add(body);
 
@@ -164,47 +210,81 @@ function buildRobotMesh() {
     new THREE.BoxGeometry(0.082, 0.006, 0.062),
     new THREE.MeshStandardMaterial({ color: 0x1f6f8b, emissive: 0x1f6f8b, emissiveIntensity: 0.35, roughness: 0.5 })
   );
-  plate.position.y = 0.037;
+  plate.position.y = 0.040;
   plate.castShadow = true;
   g.add(plate);
 
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x161c26, roughness: 0.9 });
-  for (const sx of [-1, 1]) {
-    for (const sz of [-1, 1]) {
-      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.0205, 0.0205, 0.012, 18), wheelMat);
-      w.rotation.z = Math.PI / 2;
-      w.position.set(sx * 0.048, 0.0205, sz * 0.028);
-      w.castShadow = true;
-      g.add(w);
-    }
+  // differential drive: one wheel per side, axle across the robot (local Z)
+  const tyreMat = new THREE.MeshStandardMaterial({ color: 0x141a24, roughness: 0.92 });
+  const hubMat = new THREE.MeshStandardMaterial({ color: 0x8e9cb2, roughness: 0.35, metalness: 0.6 });
+  const wheels = [];
+  for (const side of [-1, 1]) {
+    const wheel = new THREE.Group();
+    const tyre = new THREE.Mesh(new THREE.CylinderGeometry(0.0205, 0.0205, 0.011, 22), tyreMat);
+    tyre.rotation.x = Math.PI / 2;          // axle along local Z = rolling along local X
+    tyre.castShadow = true;
+    wheel.add(tyre);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.0095, 0.0095, 0.0118, 14), hubMat);
+    hub.rotation.x = Math.PI / 2;
+    wheel.add(hub);
+    wheel.position.set(0, 0.0205, side * 0.0475);
+    g.add(wheel);
+    wheels.push({ group: wheel, side });
+  }
+
+  // idler balls so the chassis looks like it rests on something front and back
+  const casterMat = new THREE.MeshStandardMaterial({ color: 0x2b3648, roughness: 0.5 });
+  for (const x of [-0.042, 0.042]) {
+    const c = new THREE.Mesh(new THREE.SphereGeometry(0.0062, 12, 10), casterMat);
+    c.position.set(x, 0.0062, 0);
+    g.add(c);
   }
 
   const barMat = new THREE.MeshStandardMaterial({ color: 0x0d1220, roughness: 0.7 });
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.008, ROBOT.barWidth), barMat);
-  bar.position.set(ROBOT.sensorReach, 0.006, 0);
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.007, ROBOT.barWidth + 0.004), barMat);
+  bar.position.set(ROBOT.sensorReach, 0.007, 0);
   g.add(bar);
 
   const led = [];
   for (let i = 0; i < 7; i++) {
-    const off = (i - 3) * ROBOT.sensorSpacing;
+    const off = sensorOffset(i);
     const m = new THREE.Mesh(
-      new THREE.SphereGeometry(0.0032, 10, 8),
-      new THREE.MeshStandardMaterial({ color: 0x22303f, emissive: 0x000000, roughness: 0.4 })
+      new THREE.SphereGeometry(0.0034, 12, 10),
+      new THREE.MeshStandardMaterial({ color: 0x1a2432, emissive: 0x0a1520, emissiveIntensity: 0.4, roughness: 0.35 })
     );
-    m.position.set(ROBOT.sensorReach + 0.004, 0.005, off);
+    m.position.set(ROBOT.sensorReach + 0.003, 0.005, off);
     g.add(m);
     led.push(m);
   }
+
+  // one floating readout above the robot: sensor 1 … 7 with live values
+  const strip = makeReadoutStrip();
+  strip.spr.position.set(0, 0.078, 0);
+  g.add(strip.spr);
 
   const beacon = new THREE.Mesh(
     new THREE.SphereGeometry(0.006, 12, 10),
     new THREE.MeshStandardMaterial({ color: 0x38e1ff, emissive: 0x38e1ff, emissiveIntensity: 1.6 })
   );
-  beacon.position.set(-0.03, 0.046, 0);
+  beacon.position.set(-0.032, 0.048, 0);
   g.add(beacon);
 
+  // ground footprints show where each sensor is actually looking
+  const spots = [];
+  const spotGeo = new THREE.RingGeometry(0.0072, 0.0112, 22).rotateX(-Math.PI / 2);
+  for (let i = 0; i < 7; i++) {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x0d1220, transparent: true, opacity: 0.5, depthWrite: false,
+    });
+    const s = new THREE.Mesh(spotGeo, mat);
+    s.position.y = 0.008;
+    s.renderOrder = 4;
+    scene.add(s);
+    spots.push(s);
+  }
+
   scene.add(g);
-  return { group: g, led, beacon };
+  return { group: g, led, strip, beacon, wheels, spots };
 }
 
 let robotMesh = null;
@@ -224,7 +304,10 @@ function loadLevel(i) {
   trackGroup.add(buildTrackMesh(track));
   trackGroup.add(buildStartGate(track));
 
-  if (robotMesh) scene.remove(robotMesh.group);
+  if (robotMesh) {
+    scene.remove(robotMesh.group);
+    robotMesh.spots.forEach((sp) => { scene.remove(sp); sp.material.dispose(); });
+  }
   robotMesh = buildRobotMesh();
 
   sim.reset();
@@ -446,19 +529,52 @@ function tick(now) {
   renderer.render(scene, camera);
 }
 
+let labelClock = 0;
+
 function updateRobotMesh(dt) {
   if (!robot || !robotMesh) return;
   const g = robotMesh.group;
   g.position.set(robot.x, 0, robot.y);
   g.rotation.y = -robot.th;
 
-  const data = robot.sensorsData;
-  for (let i = 0; i < robotMesh.led.length; i++) {
-    const a = (data[i]?.analog ?? 0) / 100;
-    const m = robotMesh.led[i].material;
-    m.emissive.setRGB(0.15 + 0.05 * a, 0.75 * a + 0.05, 0.9 * a + 0.1);
-    m.emissiveIntensity = 0.2 + a * 2.4;
+  // wheels: spin about the axle (local Z) at the commanded wheel speed
+  const r = 0.0205;
+  for (const w of robotMesh.wheels) {
+    const v = w.side > 0 ? robot.vL : robot.vR;   // +Z side is the left wheel
+    w.group.rotation.z -= (v / r) * dt;
   }
+
+  const data = robot.sensorsData;
+  labelClock += dt;
+  if (labelClock > 0.09) {
+    labelClock = 0;
+    robotMesh.strip.draw(data.map((d) => d.analog));
+  }
+
+  for (let i = 0; i < data.length; i++) {
+    const analog = data[i]?.analog ?? 0;
+    const f = Math.pow(analog / 100, 0.8);
+
+    // LED on the bar
+    const m = robotMesh.led[i]?.material;
+    if (m) {
+      m.emissive.setRGB(0.05 + 0.10 * f, 0.22 + 0.62 * f, 0.28 + 0.55 * f);
+      m.emissiveIntensity = 0.55 + f * 2.6;
+      m.color.setScalar(0.10 + 0.25 * f);
+    }
+
+
+    // ground spot where the sensor is looking
+    const sp = robotMesh.spots[i];
+    if (sp) {
+      const pose = robot.sensorPose(i);
+      sp.position.set(pose.x, 0.008, pose.y);
+      sp.material.opacity = 0.55 + f * 0.45;
+      // dark slate ring on the light mat, flipping to signal green when it sees black
+      sp.material.color.setRGB(0.12 + 0.05 * f, 0.16 + 0.70 * f, 0.20 + 0.55 * f);
+    }
+  }
+
   robotMesh.beacon.material.emissiveIntensity = S.running ? 1.6 + Math.sin(S.time * 9) * 0.6 : 0.7;
 }
 
@@ -705,6 +821,18 @@ window.__sim = {
     msg: document.getElementById("msg").textContent,
   }),
   setSpeed: (v) => { speed = v; },
+  spots: () => (robotMesh?.spots ?? []).map((s) => ({
+    x: +s.position.x.toFixed(3), z: +s.position.z.toFixed(3),
+    o: +s.material.opacity.toFixed(2),
+    c: s.material.color.getHexString(),
+  })),
+  stripVisible: () => {
+    const w = robotMesh?.strip?.spr;
+    if (!w) return null;
+    const p = new THREE.Vector3();
+    w.getWorldPosition(p);
+    return { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3), visible: w.visible };
+  },
   shot: (w = 640) => {
     renderer.render(scene, camera);
     const src = renderer.domElement;
